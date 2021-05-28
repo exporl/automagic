@@ -400,7 +400,7 @@ end
 % Write back output
 if ~isempty(EEGSystem.refChan) 
 %     EEG.automagic.autoBadChans = setdiff(removedChans, EEGSystem.refChan.idx);
-removedChans(removedChans > EEGSystem.refChan.idx)=removedChans(removedChans > EEGSystem.refChan.idx)+1;
+removedChans(removedChans >= EEGSystem.refChan.idx)=removedChans(removedChans >= EEGSystem.refChan.idx)+1;
 EEG.automagic.autoBadChans = removedChans;
 else
     EEG.automagic.autoBadChans = removedChans;
