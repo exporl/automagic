@@ -143,12 +143,14 @@ data_orig = data; % for plot with original data
 EEGRef = EEG;
 
 % Trim data
+
+EEG.automagic.TrimData.performed = 'no';
 if isfield(TrimDataParams, 'changeCheck')
     if TrimDataParams.changeCheck
         try
             x = EEG.pnts;
             disp('Trimming data')
-            EEG = performTrimData(EEG, TrimDataParams);
+            [EEG, EOG] = performTrimData(EEG, EOG, TrimDataParams);
             if x > EEG.pnts
                 EEG.automagic.TrimData.performed = 'yes';
                 EEG.automagic.TrimData.message = sprintf('\nData trimmed before trigger ''%s'' (padding: %s) and after trigger ''%s'' (padding: %s).' , TrimDataParams.edit_firstTrigger, TrimDataParams.edit_paddingFirst, TrimDataParams.edit_lastTrigger, TrimDataParams.edit_paddingLast);
@@ -194,15 +196,30 @@ EEG.automagic.preprocessing.removedMask = false(1, s); clear s;
 EEG.chanlocs(1).maraLabel = [];
 EOG.chanlocs(1).maraLabel = [];
 
+% trim outliers (datapoints)
+EEG.automagic.TrimOutlier.performed = 'no';
+if isfield(TrimOutlierParams, 'AmpTresh')
+    if ~isempty(TrimOutlierParams.AmpTresh) & ~isempty(TrimOutlierParams.rejRange)
+        try
+            [EEG, EOG] = performTrimOutlier(EEG, EOG, TrimOutlierParams);
+            EEG.automagic.TrimOutlier.performed = 'yes';
+        catch ME
+            ME.message
+            EEG.automagic.TrimOutlier.performed = 'no';
+        end
+    end
+end
+EEGforBadChansPlot = EEG;
+
 % Running prep
 try
-[EEG, EOG] = performPrep(EEG, EOG, PrepParams, EEGSystem.refChan);
+    [EEG, EOG] = performPrep(EEG, EOG, PrepParams, EEGSystem.refChan);
 catch ME
     message = ['PREP is not done on this subject, continue with the next steps: ' ...
         ME.message];
-        warning(message)
-        EEG.automagic.PREP.performed = 'FAILED';
-        EEG.automagic.error_msg = message;
+    warning(message)
+    EEG.automagic.PREP.performed = 'FAILED';
+    EEG.automagic.error_msg = message;
 end
 if Settings.trackAllSteps && ~isempty(PrepParams)
    allSteps = matfile(Settings.pathToSteps, 'Writable', true);
@@ -257,22 +274,6 @@ toRemove = [];
 EEG.automagic.preprocessing.removedMask = removedMask;
 EEG.automagic.preprocessing.toRemove = toRemove;
 clear toRemove removedMask newToRemove;
-
-EEGforTrimPlot = EEG;
-% trim outliers (datapoints)
-EEG.automagic.TrimOutlier.performed = 'no';
-if isfield(TrimOutlierParams, 'AmpTresh')
-    if ~isempty(TrimOutlierParams.AmpTresh) & ~isempty(TrimOutlierParams.rejRange)
-        try
-            EEG = performTrimOutlier(EEG, str2double(TrimOutlierParams.AmpTresh), str2double(TrimOutlierParams.rejRange));
-            EEG.automagic.TrimOutlier.performed = 'yes';
-            EEG.automagic.TrimOutlier.message = EEG.etc.trimOutlier.message;
-        catch ME
-            ME.message
-            EEG.automagic.TrimOutlier.performed = 'no';
-        end
-    end
-end
 
 % Remove effect of EOG
 EEG = performEOGRegression(EEG, EOG, EOGRegressionParams);
@@ -399,7 +400,9 @@ end
 
 % Write back output
 if ~isempty(EEGSystem.refChan)
-    EEG.automagic.autoBadChans = setdiff(removedChans, EEGSystem.refChan.idx);
+    removedChans(removedChans >= EEGSystem.refChan.idx)=removedChans(removedChans >= EEGSystem.refChan.idx)+1;
+    EEG.automagic.autoBadChans = removedChans;
+    
 else
     EEG.automagic.autoBadChans = removedChans;
 end
@@ -431,6 +434,8 @@ else
     plot_FilterParams.high.order = [];
 end
 EEG_filtered_toplot = performFilter(data_orig, plot_FilterParams);
+EEGforBadChansPlot = performFilter(EEGforBadChansPlot, plot_FilterParams);
+
 
 fig1 = figure('visible', 'off');
 set(gcf, 'Color', [1,1,1])
@@ -455,6 +460,10 @@ if ~isempty(EOG.data)
     colorbar;
 else
     title('No EOG data available');
+    XTicks = [] ;
+    XTicketLabels = [];
+    set(gca,'XTick', XTicks)
+    set(gca,'XTickLabel', XTicketLabels)
 end
 
 % sort channels frontal/centro-parietal/occiptial
@@ -499,53 +508,9 @@ else
 end
 colorbar;
 
-%eeg figure bad channels
-subplot(13,1,4:5)
-imagesc(EEG_filtered_toplot.data(final_idx, :));
-axe = gca;
-hold on;
-[~, idx_bad] = ismember(final_idx, EEG.automagic.autoBadChans);
-bads = EEG.automagic.autoBadChans(nonzeros(idx_bad));
-for i = 1:length(bads)
-    y = bads(i);
-    p1 = [0, size(EEG_filtered_toplot.data, 2)];
-    p2 = [y, y];
-    plot(axe, p1, p2, 'b' ,'LineWidth', 0.5);
-end
-hold off;
-colormap(CT);
-caxis([-100 100])
-set(gca,'XTick', XTicks)
-set(gca,'XTickLabel', XTicketLabels)
-if Settings.sortChans
-    try
-        YTick = [1 length(f_idx), length(f_idx)+length(cp_idx), length(f_idx)+length(cp_idx)+length(o_idx)];
-        set(gca, 'YTick', YTick)    
-        h1=text(-len/10, length(f_idx)/2,...
-            'Frontal', 'FontSize', 7);
-        h2=text(-len/10, length(f_idx)+length(cp_idx)/2 ,...
-            ['Centro-' newline 'parietal'], 'FontSize', 7);
-        h3=text(-len/10, length(f_idx)+length(cp_idx)+length(o_idx)/2,...
-            'Occipital', 'FontSize', 7);
-    catch
-    end
-end
-title('Detected bad channels')
-colorbar;
-
 % subplot, rejected data points
-if Settings.sortChans
-    try
-        [final_idx,f_idx,cp_idx,o_idx,len]  = performSortChans(EEGforTrimPlot);
-    catch
-        final_idx = 1:size(EEGforTrimPlot.data, 1);
-    end
-else
-    final_idx = 1:size(EEGforTrimPlot.data, 1);
-end
-
-trimOutlier_subplot = subplot(13,1,6:7);
-imagesc(EEGforTrimPlot.data(final_idx, :));
+trimOutlier_subplot = subplot(13,1,4:5);
+imagesc(EEG_filtered_toplot.data(final_idx, :));
 colormap(CT);
 caxis([-100 100])
 set(gca,'XTick', XTicks)
@@ -554,8 +519,8 @@ set(gca,'XTickLabel', XTicketLabels)
 % add vertical lines showing datapoints to trim
 axe = gca;
 hold on;
-if strcmp(EEG.automagic.TrimOutlier.performed, 'Yes') 
-    toPlot = EEG.etc.trimOutlier.cleanDatapointMask;
+if strcmp(EEG.automagic.TrimOutlier.performed, 'yes') 
+    toPlot = EEG.automagic.TrimOutlier.cleanDatapointMask;
     zer = find(~toPlot);
     if ~isempty(zer)
         starts = strfind([false, toPlot], [1 0]);
@@ -568,7 +533,7 @@ if strcmp(EEG.automagic.TrimOutlier.performed, 'Yes')
     %         xline(stops(i), '-black', 'LineWidth', 2)
             p1 = [starts(i) starts(i)];
             p2 = [stops(i) stops(i)];
-            p3 = [0, size(EEGforTrimPlot.data, 1)];
+            p3 = [0, size(EEG_filtered_toplot.data, 1)];
             plot(axe, p1, p3, '-red', 'LineWidth', 2)
             plot(axe, p2, p3, '-black', 'LineWidth', 2)
         end     
@@ -597,7 +562,61 @@ hold off;
 title(title_text)
 colorbar;
 
+% sort channels frontal/centro-parietal/occiptial
+if Settings.sortChans
+    try
+        [final_idx,f_idx,cp_idx,o_idx,len]  = performSortChans(EEGforBadChansPlot);
+    catch
+        final_idx = 1:size(EEGforBadChansPlot.data, 1);
+    end
+else
+    final_idx = 1:size(EEGforBadChansPlot.data, 1);
+end
+%eeg figure bad channels
+subplot(13,1,6:7)
+imagesc(EEGforBadChansPlot.data(final_idx, :));
+axe = gca;
+hold on;
+[~, idx_bad] = ismember(final_idx, EEG.automagic.autoBadChans);
+bads = EEG.automagic.autoBadChans(nonzeros(idx_bad));
+for i = 1:length(bads)
+    y = bads(i);
+    p1 = [0, size(EEGforBadChansPlot.data, 2)];
+    p2 = [y, y];
+    plot(axe, p1, p2, 'b' ,'LineWidth', 0.5);
+end
+hold off;
+colormap(CT);
+caxis([-100 100])
+set(gca,'XTick', XTicks)
+set(gca,'XTickLabel', XTicketLabels)
+if Settings.sortChans
+    try
+        YTick = [1 length(f_idx), length(f_idx)+length(cp_idx), length(f_idx)+length(cp_idx)+length(o_idx)];
+        set(gca, 'YTick', YTick)    
+        h1=text(-len/10, length(f_idx)/2,...
+            'Frontal', 'FontSize', 7);
+        h2=text(-len/10, length(f_idx)+length(cp_idx)/2 ,...
+            ['Centro-' newline 'parietal'], 'FontSize', 7);
+        h3=text(-len/10, length(f_idx)+length(cp_idx)+length(o_idx)/2,...
+            'Occipital', 'FontSize', 7);
+    catch
+    end
+end
+title('Detected bad channels')
+colorbar;
+
+
 % figure;
+if Settings.sortChans
+    try
+        [final_idx,f_idx,cp_idx,o_idx,len]  = performSortChans(EEG_regressed);
+    catch
+        final_idx = 1:size(EEG_regressed.data, 1);
+    end
+else
+    final_idx = 1:size(EEG_regressed.data, 1);
+end
 eogRegress_subplot=subplot(13,1,8:9);
 imagesc(EEG_regressed.data(final_idx, :));
 colormap(CT);

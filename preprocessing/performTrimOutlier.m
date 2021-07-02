@@ -39,7 +39,7 @@
 % along with this program; if not, write to the Free Software
 % Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-function EEG = performTrimOutlier(EEG, amplitudeThreshold, pointSpreadWidth)
+function [EEG, EOG] = performTrimOutlier(EEG, EOG, TrimOutlierParams)
 
 if ~(nargin==3)
     error('trimOutlier() requires 3 input arguments.')
@@ -51,15 +51,51 @@ if length(size(EEG.data))==3
     return
 end
 
+%%
+amplitudeThreshold = str2double(TrimOutlierParams.AmpTresh);
+pointSpreadWidth = str2double(TrimOutlierParams.rejRange);
+numChans = str2double(TrimOutlierParams.numChans);
+high = TrimOutlierParams.high;
+high.freq = str2double(high.freq);
+if strcmp(high.order, 'Default')
+    high.order = [];
+else
+    high.order = str2double(high.order);
+end
+
+%% in case EEG has a 'sample' events instead of 'latency'
+if isfield(EEG.event, 'sample')
+    [EEG.event.latency] = EEG.event.sample;
+end
+
+%% temporary HP filter
+
+if high.perform % temporary high-pass filter
+    [~, EEGtemp, ~, b] = evalc('pop_eegfiltnew(EEG, high.freq, 0, high.order)');
+    
+    EEG.automagic.TrimOutlier.highpass.performed = 'yes';
+    EEG.automagic.TrimOutlier.highpass.freq = high.freq;
+    EEG.automagic.TrimOutlier.highpass.order = length(b)-1;
+    EEG.automagic.TrimOutlier.highpass.transitionBandWidth = 3.3 / (length(b)-1) * EEG.srate;
+else
+    EEGtemp = EEG;
+    EEG.automagic.TrimOutlier.highpass.performed = 'no';
+end
+
 %% remove bad datapoints
 
 % obtain the window size
 windowSize = pointSpreadWidth; % millisecond
-windowSizeInFrame = round(windowSize/(1000/EEG.srate)); % frame
+windowSizeInFrame = round(windowSize/(1000/EEGtemp.srate)); % frame
 
-% compute bad datapoints
-absMinMaxAllChan = max([abs(min(EEG.data(:,:))); abs(max(EEG.data(:,:)))],[],1);
-badPoints  = absMinMaxAllChan > amplitudeThreshold;
+% compute bad datapoints (old version)
+% absMinMaxAllChan = max([abs(min(EEGtemp.data(:,:))); abs(max(EEGtemp.data(:,:)))],[],1);
+% badPoints  = absMinMaxAllChan > amplitudeThreshold;
+
+badPoints = 0;
+% remove datapoints, if 'numChans' of the channels exceeds defined threshold (new version)
+badPoints = squeeze(sum([(EEGtemp.data(:, :) > amplitudeThreshold) | (EEGtemp.data(:, :) < -amplitudeThreshold)],1) > numChans);
+
 
 if any(badPoints)
     % expand badPoints
@@ -71,20 +107,22 @@ if any(badPoints)
     
     % reject them
     EEG = pop_select(EEG, 'nopoint', [rejectDataIntervals(:,1) rejectDataIntervals(:,2)]);
+    % remove also from EOG
+    EOG = pop_select(EOG, 'nopoint', [rejectDataIntervals(:,1) rejectDataIntervals(:,2)]);
     
     % Save the clean data points.
-    EEG.etc.trimOutlier.cleanDatapointMask = ~badPointsExpanded;
+    EEG.automagic.TrimOutlier.cleanDatapointMask = ~badPointsExpanded;
     
     % display log
     badPointsInSec = length(find(badPointsExpanded))*1000/EEG.srate/1000; %#ok<*NASGU>
     m = sprintf('\n%2.0fuV threshold with %2.0fms spreading rejected %2.1fsec data, added %1.0f boundaries.', amplitudeThreshold, windowSize, badPointsInSec, size(rejectDataIntervals,1));
     disp(m)
-    EEG.etc.trimOutlier.message = m;
+    EEG.automagic.TrimOutlier.message = m;
 else
     % Save the clean data points.
-    EEG.etc.trimOutlier.cleanDatapointMask = logical(ones(EEG.pnts,1));
-    
+    EEG.automagic.TrimOutlier.cleanDatapointMask = logical(ones(EEG.pnts,1));
+    EEG.automagic.TrimOutlier.message = 'No datapoint rejected.';
     disp('No datapoint rejected.');
 end
 
-disp('trimOutlier done. The masks for clean data points are stored under EEG.etc.trimOutlier.')
+disp('trimOutlier done. The masks for clean data points are stored under EEG.automagic.TrimOutlier.')
