@@ -27,7 +27,7 @@ et_namePattern = params.fileext_edit;
 eeg_fileName = EEG.fileName;
 x = split(et_namePattern, '.');
 et_fileExt = x{end};
-et_datafolder = params.datafolder_edit;
+et_datafolder = params.datafolder_edit; 
 dataFolder = EEG.dataFolder;
 L_GAZE_X = params.l_gaze_x_edit;
 L_GAZE_Y = params.l_gaze_y_edit;
@@ -35,6 +35,8 @@ R_GAZE_X = params.r_gaze_x_edit;
 R_GAZE_Y = params.r_gaze_y_edit;
 SCREEN_X = str2double(params.screenWidth_edit);
 SCREEN_Y = str2double(params.screenHeight_edit);
+
+%% find first and last trigger, if not provided
 
 if isempty(params.startTrigger_edit) & isempty(params.endTrigger_edit)
     startTrigger = str2double(EEG.event(1).type);
@@ -66,7 +68,8 @@ end
 %% import & synchronize ET data
 EEG = pop_importeyetracker(EEG, fullfile(dataFolder, et_fileName), ...
     [startTrigger, endTrigger], 1:length( ET.colheader), ET.colheader, 1,1,1,0);
-
+        
+        
 %% Mark intervals with bad eye tracking data
 % important, so these intervals will not influence our saccade detection
 % This function is also useful to objectively reject intervals during
@@ -115,9 +118,9 @@ end
 
 %% Create optimized data for ICA training (OPTICAT, Dimigen, 2018)
 
-OW_PROPORTION    = 1.0          % overweighting proportion
-SACCADE_WINDOW   = [str2double(params.from_edit) str2double(params.to_edit)]  % time window to overweight (-20 to 10 ms is default)
-REMOVE_EPOCHMEAN = true         % subtract mean from overweighted epochs? (recommended)
+OW_PROPORTION    = 1.0;          % overweighting proportion
+SACCADE_WINDOW   = [str2double(params.from_edit) str2double(params.to_edit)];  % time window to overweight (-20 to 10 ms is default)
+REMOVE_EPOCHMEAN = true;         % subtract mean from overweighted epochs? (recommended)
 
 % find name of saccade event 
 i = find(~cellfun(@isempty, regexp({EEG.event(:).type}, 'sac')));

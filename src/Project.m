@@ -498,8 +498,27 @@ classdef Project < handle
                     end
                 end
                 
-                % preprocess the file
-                [EEG, automagic] = block.preprocess();
+                try
+                    % preprocess the file
+                    [EEG, automagic] = block.preprocess();
+                    
+                catch ME
+                    ME.message
+                    warning(['Error in file: ', ME.stack(1).file, ' (Line: ',  num2str(ME.stack(1).line), ') ...'])
+
+                    
+                    % save the ids to the txt file
+                    if isfile(fullfile(self.resultFolder, 'errors.txt'))
+                        dlmwrite(fullfile(self.resultFolder, 'errors.txt'), uniqueName, '-append', 'delimiter', '')
+                    else
+                        dlmwrite(fullfile(self.resultFolder, 'errors.txt'), uniqueName, 'delimiter', '')
+                    end
+                    
+                    % init the vars, otherwise error
+                    EEG = struct([]);
+                    automagic = struct();
+                    automagic.error_msg = ME.message;      
+                end
                 
                 if( isempty(EEG) || isfield(automagic, 'error_msg'))
                     message = automagic.error_msg;
@@ -1792,18 +1811,21 @@ classdef Project < handle
                 
                 handle = findobj(allchild(0), 'flat', 'Tag', 'mainGUI');
                 main_pos = get(handle,'position');
-                screen_size = get( groot, 'Screensize' );
-                choice = MFquestdlg(...
-                    [main_pos(3)/2/screen_size(3) main_pos(4)/2/screen_size(4)], ...
-                    ['Some files are already processed. Would ',...
-                    'you like to overwrite them or skip them ?'], ...
-                    'Pre-existing files in the project folder.',...
-                    'Over Write', 'Skip','Over Write');
-                switch choice
-                    case 'Over Write'
-                        skip = 0;
-                    case 'Skip'
-                        skip = 1;
+
+                if ~isempty(main_pos)
+                    screen_size = get( groot, 'Screensize' );
+                    choice = MFquestdlg(...
+                        [main_pos(3)/2/screen_size(3) main_pos(4)/2/screen_size(4)], ...
+                        ['Some files are already processed. Would ',...
+                        'you like to overwrite them or skip them ?'], ...
+                        'Pre-existing files in the project folder.',...
+                        'Over Write', 'Skip','Over Write');
+                    switch choice
+                        case 'Over Write'
+                            skip = 0;
+                        case 'Skip'
+                            skip = 1;
+                    end
                 end
             end
         end
@@ -1825,7 +1847,7 @@ classdef Project < handle
             if isempty(subjectFileName)
                 subjectFileName = find('/'== sourceAddress);
             end
-            subjectFileName = subjectFileName(end);
+            subjectFileName = subjectFileName(end-1);
             subjectFileName = sourceAddress(subjectFileName+1:end);
             fprintf(fileID, [datestr(datetime('now')) ' The data file ' subjectFileName ...
                 ' could not be preprocessed:' msg '\n']);

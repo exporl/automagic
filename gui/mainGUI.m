@@ -41,7 +41,7 @@ function varargout = mainGUI(varargin)
 % You should have received a copy of the GNU General Public License
 % along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-% Last Modified by GUIDE v2.5 02-Oct-2020 18:00:00
+% Last Modified by GUIDE v2.5 04-Apr-2022 15:22:35
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -142,6 +142,7 @@ end
 % (Synchronisation)
 k = handles.projectList.keys;
 v = handles.projectList.values;
+
 for i = 1:handles.projectList.Count
     if( ~ strcmp(k(i), handles.CGV.NEW_PROJECT.LIST_NAME) && ...
             ~ strcmp(k(i), handles.CGV.LOAD_PROJECT.LIST_NAME) )
@@ -153,6 +154,7 @@ for i = 1:handles.projectList.Count
         end
     end
 end
+
 
 set(handles.existingpopupmenu,...
     'String', handles.projectList.keys, ...
@@ -240,6 +242,7 @@ if(strcmp(name, handles.CGV.NEW_PROJECT.LIST_NAME))
     set(handles.projectname, 'String', handles.CGV.NEW_PROJECT.NAME);
     set(handles.datafoldershow, 'String', handles.CGV.NEW_PROJECT.DATA_FOLDER);
     set(handles.projectfoldershow, 'String', handles.CGV.NEW_PROJECT.FOLDER);
+    set(handles.isBIDSformat, 'Value', 0);
     
     set(handles.subjectnumber, 'String', '')
     set(handles.filenumber, 'String', '')
@@ -382,6 +385,8 @@ set(handles.preprocessednumber, 'String', ...
     [num2str(project.nProcessedSubjects), ' subjects already done'])
 set(handles.fpreprocessednumber, 'String', ...
     [num2str(project.nProcessedFiles), ' files already done'])
+set(handles.isBIDSformat, 'Value', ...
+    handles.params.Settings.isBIDSformat_value)
 
 % Set the file extension
 set(handles.extedit, 'String', project.mask);
@@ -427,6 +432,7 @@ set(handles.projectfoldershow, 'enable', mode);
 set(handles.extedit, 'enable', mode);
 set(handles.choosedata, 'enable', mode);
 set(handles.chooseproject, 'enable', mode);
+set(handles.isBIDSformat, 'enable', mode);
 set(handles.createbutton, 'visible', mode)
 set(handles.deleteprojectbutton, 'visible', visibility)
 set(handles.excludecheckbox, 'enable', mode);
@@ -642,6 +648,12 @@ if isempty(project)
     return;
 end
 
+if project.nProcessedFiles < 1 
+    popup_msg('No subjects to show. Please first preprocess.', ...
+    'Error');
+    return;
+end
+
 % Change the cursor to a watch while updating...
 set(handles.mainGUI, 'pointer', 'watch')
 drawnow;
@@ -673,6 +685,12 @@ project = handles.projectList(name);
 if isempty(project)
     popup_msg('Please first create the Project',...
         'Error');
+    return;
+end
+
+if project.nProcessedFiles < 1 
+    popup_msg('No subjects to show. Please first preprocess.', ...
+    'Error');
     return;
 end
 
@@ -904,7 +922,6 @@ if(any(strcmp(ext, {handles.CGV.EXTENSIONS.text})) && isempty(sRate))
         'Error');
     return;
 end
-
 
 % Get reduce checkbox
 if get(handles.excludecheckbox, 'Value')
@@ -1666,8 +1683,10 @@ projDetails = handles.projectList(projName);
 try 
     datafolder{1} = projDetails.dataFolder;
     noProject = 0;
-catch ME
-    warning('You must first create the project')
+catch 
+    popup_msg('You must first create the project', ...
+    'Error');
+    warning()
     noProject = 1;
 end
 
@@ -1870,3 +1889,22 @@ catch ME
 end
 
 guidata(hObject,handles);
+
+
+% --- Executes on button press in isBIDSformat.
+function isBIDSformat_Callback(hObject, eventdata, handles)
+% hObject    handle to isBIDSformat (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of isBIDSformat
+handles.params.Settings.isBIDSformat_value = get(hObject,'Value');
+guidata(hObject,handles);
+
+
+% --- Executes on button press in helpisbidspushbutton.
+function helpisbidspushbutton_Callback(hObject, eventdata, handles)
+% hObject    handle to helpisbidspushbutton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+web('https://github.com/methlabUZH/automagic/wiki/BIDS-integration#read-from-bids-folder-structure', '-browser');

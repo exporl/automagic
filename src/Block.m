@@ -896,6 +896,14 @@ classdef Block < handle
                 end
             end
             
+            if (isfield(automagic,'crd'))
+                if (strcmp(automagic.crd.performed, 'yes'))
+                    fprintf(fileID, sprintf(text.badchans.outlier,...
+                        length(automagic.crd.badChans)));
+                end
+            fprintf(fileID, '\n');
+            end
+            
             if(isfield(automagic, 'filtering'))
                 if strcmp(automagic.filtering.performed, 'yes')
                     pars = automagic.filtering;
@@ -939,6 +947,13 @@ classdef Block < handle
                             pars.zapline.freq));
                     end
                     
+                    if (isfield(pars, 'zaplineplus') && ...
+                            strcmp(pars.zaplineplus.performed, 'yes'))
+                        
+                        fprintf(fileID, sprintf(text.filtering.ZapLinePlus, ...
+                            pars.zaplineplus.zaplineConfig.noisefreqs));
+                    end
+                    
                     if filtnew
                         fprintf(fileID, '\n');
                     end
@@ -970,13 +985,6 @@ classdef Block < handle
                 end
             end
             
-            if (isfield(automagic,'crd'))
-                if (strcmp(automagic.crd.performed, 'yes'))
-                    fprintf(fileID, sprintf(text.badchans.outlier,...
-                        length(automagic.crd.badChans)));
-                end
-            fprintf(fileID, '\n');
-            end
             
             if(isfield(automagic, 'EOGRegression'))
                 if strcmp(automagic.EOGRegression.performed, 'yes')
@@ -1060,6 +1068,17 @@ classdef Block < handle
                             regexprep(num2str(pars.settings.channelNoiseTher), '\s+','; '), ...
                             regexprep(num2str(pars.settings.otherTher), '\s+','; ')));
                     end                        
+                    fprintf(fileID, '\n');
+                end
+            end
+            
+            if(isfield(automagic.iclabel, 'ETguidedICA'))
+                if strcmp(automagic.iclabel.ETguidedICA.performed, 'yes')           
+                    fprintf(fileID, sprintf(text.ETguidedICA.ETguidedICA_done));
+                    fprintf(fileID, '\n');              
+                    fprintf(fileID, sprintf(text.ETguidedICA.filtering, ...
+                                pars.highpass.freq, pars.highpass.order, ...
+                                pars.highpass.transitionBandWidth)); % the same as for ICA (for now)     
                     fprintf(fileID, '\n');
                 end
             end
@@ -1247,8 +1266,12 @@ classdef Block < handle
             
             addEEGLab();
             
+            % Case of BIDS format (beta version: 03.2022)
+            if self.params.Settings.isBIDSformat_value == 1
+                [~, data] = evalc('import_bids(self.project.dataFolder, self)');
+                        
             % Case of .mat file  
-            if( any(strcmp(self.fileExtension(end-(length(self.fileExtension)-1):end), ...
+            elseif( any(strcmp(self.fileExtension(end-(length(self.fileExtension)-1):end), ...
                     {self.CGV.EXTENSIONS.mat})))
                 data = load(self.sourceAddress);
                 data = data.EEG;
@@ -1417,8 +1440,11 @@ classdef Block < handle
             % Return the address of the reduced file
             
             pattern = '[gobni]+i?p_';
-            reducedAddress = regexprep(resultAddress,pattern,...
+            parts = split(resultAddress, filesep);
+            parts{end} = regexprep(parts{end},pattern,...
                 strcat('reduced', int2str(dsRate), '_'));
+            reducedAddress = join(parts, filesep);
+            reducedAddress = reducedAddress{1};
         end
         
         function uniqueName = extractUniqueName(address, subject, fileName)

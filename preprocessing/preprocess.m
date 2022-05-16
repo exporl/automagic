@@ -125,7 +125,9 @@ DetrendingParams = p.Results.DetrendingParams;
 ORIGINAL_FILE = p.Results.ORIGINAL_FILE;
 TrimDataParams = p.Results.TrimDataParams;
 TrimOutlierParams = p.Results.TrimOutlierParams;
-ICLabelParams.addETdataParams = p.Results.addETdataParams;
+if ~isempty(ICLabelParams)
+    ICLabelParams.addETdataParams = p.Results.addETdataParams;
+end
 
 
 if isempty(Settings)
@@ -137,6 +139,9 @@ clear p varargin;
 addPreprocessingPaths(struct('PrepParams', PrepParams, 'CRDParams', CRDParams, ...
     'RPCAParams', RPCAParams, 'MARAParams', MARAParams, 'ICLabelParams', ICLabelParams));
 
+% %%% ACHTUNG: testing
+% data = pop_select(data, 'point', [0, 5000]);
+
 data_orig = data; % for plot with original data
 
 % Set system dependent parameters and eeparate EEG from EOG
@@ -146,7 +151,6 @@ data_orig = data; % for plot with original data
 EEGRef = EEG;
 
 % Trim data
-
 EEG.automagic.TrimData.performed = 'no';
 if isfield(TrimDataParams, 'changeCheck')
     if TrimDataParams.changeCheck
@@ -251,6 +255,14 @@ if isfield(EEG.automagic,'ZapFig')
     fig3 = EEG.automagic.ZapFig;
     EEG.automagic = rmfield(EEG.automagic,'ZapFig');
     FilterParams.zapline.finalPlot = 1;
+else
+    fig3 = [];
+end
+
+if isfield(EEG.automagic,'ZapFigPlus')
+    fig3 = EEG.automagic.ZapFigPlus;
+    EEG.automagic = rmfield(EEG.automagic,'ZapFigPlus');
+    FilterParams.zaplineplus.finalPlot = 1;
 else
     fig3 = [];
 end
@@ -680,7 +692,8 @@ elseif (~isempty(RPCAParams))
 elseif (~isempty(ICLabelParams))
     title_text = 'ICLabel corrected clean data (only good channels)';
 else
-    title_text = '';
+    title_text = '\color{red}No ICA or RPCA requested';
+    cla(ica_subplot)
 end
 title(title_text)
 colorbar;

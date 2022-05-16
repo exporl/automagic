@@ -77,4 +77,10 @@ end
 addNoiseTools();
 
 addCbrewer();
+
+addBidsTools();
+
+addBrainVision();
+
+addZapLinePlus();
 end
